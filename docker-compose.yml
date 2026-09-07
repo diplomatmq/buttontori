@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: gift_caps_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Сохраняем базу данных на хосте
+      - ./data:/app/data
+    environment:
+      # Переопределяем путь к БД для Docker
+      - DB_PATH=/app/data/bot_database.db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
