@@ -319,6 +319,10 @@ async def handle_dice(message: Message):
     if message.dice.emoji != "🎰":
         return
     
+    # Игнорируем пересланные сообщения
+    if message.forward_from or message.forward_from_chat or message.forward_date:
+        return
+    
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
     dice_value = message.dice.value
