@@ -51,45 +51,34 @@ PRIZE_VALUES = {
     "nft": 1000
 }
 
-# Вероятности выпадения (вес)
-PRIZE_WEIGHTS = {
-    "bear": 25,      # Самый частый
-    "hearts": 25,    # Самый частый
-    "rose": 15,      # Менее частый
-    "gift": 15,      # Менее частый
-    "cake": 8,       # Еще менее частый
-    "bouquet": 8,    # Еще менее частый
-    "rocket": 8,     # Еще менее частый
-    "ring": 3,       # Редкий
-    "diamond": 3,    # Редкий
-    "cup": 3,        # Редкий
-    "nft": 1         # Самый редкий
-}
+# Фиксированное количество призов на поле 5x5.
+PRIZE_GROUPS = (
+    (1, ("nft",)),
+    (2, ("ring", "cup")),
+    (4, ("cake", "rocket")),
+    (8, ("rose", "gift")),
+    (10, ("bear", "hearts")),
+)
 
 # Хранилище для игр казино (в памяти)
 casino_games = {}
 
 
 def generate_game_field(rows=GAME_ROWS, cols=GAME_COLS):
-    """Генерирует игровое поле с призами с учетом вероятностей"""
+    """Генерирует случайно перемешанное поле 5x5 с фиксированным составом."""
     total_cells = rows * cols
-    
-    # Создаем список призов без NFT
-    prize_keys_without_nft = [k for k in PRIZE_WEIGHTS.keys() if k != "nft"]
-    weights_without_nft = [PRIZE_WEIGHTS[k] for k in prize_keys_without_nft]
-    
-    # Генерируем поле без NFT (всего ячеек - 1)
+
+    expected_cells = sum(count for count, _ in PRIZE_GROUPS)
+    if total_cells != expected_cells:
+        raise ValueError(f"Игровое поле должно содержать {expected_cells} ячеек")
+
     field = []
-    for _ in range(total_cells - 1):
-        prize = random.choices(prize_keys_without_nft, weights=weights_without_nft, k=1)[0]
-        field.append(prize)
-    
-    # Добавляем РОВНО ОДИН NFT в случайную позицию
-    field.append("nft")
-    
-    # Перемешиваем
+    for count, prize_options in PRIZE_GROUPS:
+        for _ in range(count):
+            field.append(random.choice(prize_options))
+
     random.shuffle(field)
-    
+
     return field
 
 
