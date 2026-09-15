@@ -63,7 +63,7 @@ PRIZE_NAMES = {
     "cake": "Тортик", "rocket": "Ракета", "ring": "Кольцо", "cup": "Кубок", "nft": "NFT"
 }
 PRIZE_STAGES = (15, 25, 50, 100)
-BAR_DICE_VALUES = (43,)
+BAR_DICE_VALUES = (1,)
 
 # Хранилище для игр казино (в памяти)
 casino_games = {}
@@ -388,15 +388,10 @@ async def handle_dice(message: Message):
     
     logger.info(f"Пользователь {username} (ID: {user_id}) отправил казино, выпало: {dice_value}")
     
-    # Три BAR имеют значение 43, а 777 остается отдельным джекпотом (64).
+    # Значение 64 - отдельный джекпот 777.
     if dice_value == 64:
-        # Генерируем поле 5x5
         field = generate_game_field(rows=5, cols=5)
-        
-        # Создаем уникальный ID игры
         game_id = f"{user_id}_{message.message_id}"
-        
-        # Сохраняем игру в памяти
         casino_games[game_id] = {
             "user_id": user_id,
             "field": field,
@@ -409,14 +404,8 @@ async def handle_dice(message: Message):
             "upgrade_slots": 0,
             "upgrade_revealed": {}
         }
-        
-        # Создаем клавиатуру
         keyboard = create_casino_keyboard(game_id, field, user_id=user_id)
-        
-        # Получаем username с @ если есть, иначе имя
         username_mention = f"@{message.from_user.username}" if message.from_user.username else username
-        
-        # Отправляем с кастомными эмодзи через HTML тег <tg-emoji>
         await message.reply(
             f'<tg-emoji emoji-id="5373346752671804066">🎉</tg-emoji> Поздравляю, {username_mention}! '
             f'Перед тобой 25 ячеек, открыв любую ты гарантировано забираешь приз '
