@@ -4,7 +4,7 @@ import logging
 import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyParameters
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import random
 from database import Database
@@ -394,6 +394,7 @@ async def handle_dice(message: Message):
         game_id = f"{user_id}_{message.message_id}"
         casino_games[game_id] = {
             "user_id": user_id,
+            "source_message_id": message.message_id,
             "field": field,
             "selected": -1,
             "finished": False,
@@ -418,6 +419,7 @@ async def handle_dice(message: Message):
         bear_index = random.randrange(3)
         casino_games[game_id] = {
             "user_id": user_id,
+            "source_message_id": message.message_id,
             "finished": False,
             "bar_bear_index": bear_index,
             "bar_selected": -1,
@@ -507,9 +509,10 @@ async def process_casino_cell(callback: CallbackQuery):
             await callback.message.answer(
                 'В этот раз не повезло <tg-emoji emoji-id="5157000668627600960">😔</tg-emoji>\n\n'
                 'Повезет в следующий <tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji>\n'
-                '<tg-emoji emoji-id="5382360493161725288">✨</tg-emoji>' * 8 + '\n'
+                + ('<tg-emoji emoji-id="5382360493161725288">✨</tg-emoji>' * 8) + '\n'
                 '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
                 '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
+                reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -520,9 +523,10 @@ async def process_casino_cell(callback: CallbackQuery):
             '<tg-emoji emoji-id="5159316330310010269">🎉</tg-emoji> Поздравляю! Вы выиграли '
             '<tg-emoji emoji-id="5206502842478638898">🧸</tg-emoji>\n\n'
             'Твой приз уже в пути <tg-emoji emoji-id="5159332079955084776">🎁</tg-emoji>\n'
-            '<tg-emoji emoji-id="5382360493161725288">✨</tg-emoji>' * 8 + '\n'
+            + ('<tg-emoji emoji-id="5382360493161725288">✨</tg-emoji>' * 8) + '\n'
             '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
             '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
+            reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -569,11 +573,13 @@ async def process_casino_cell(callback: CallbackQuery):
         game["upgrade_revealed"] = {}
         await callback.answer()
         target_name = PRIZE_NAMES[game["upgrade_target"]]
-        await callback.message.edit_text(
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(
             f'<tg-emoji emoji-id="5427256683955007067">🎯</tg-emoji> <b>Улучшение приза!</b>\n\n'
             f'<blockquote><b>Приз на кону: {target_name}</b></blockquote>\n'
             f'<tg-emoji emoji-id="5159316330310010269">🔮</tg-emoji> <b>Выбери 1 из {game["upgrade_slots"]} ячеек</b>',
             reply_markup=create_upgrade_keyboard(game_id, game["upgrade_slots"]),
+            reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
             parse_mode="HTML",
         )
         return
@@ -607,6 +613,7 @@ async def process_casino_cell(callback: CallbackQuery):
                 '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Повезет в следующий раз\n\n'
                 '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
                 '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
+                reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -617,6 +624,7 @@ async def process_casino_cell(callback: CallbackQuery):
         if target == "nft":
             await callback.message.answer(
                 f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> Поздравляю, {username_mention}! Ты выиграл NFT!',
+                reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
             )
             await claim_prize(target)
@@ -626,6 +634,7 @@ async def process_casino_cell(callback: CallbackQuery):
             f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} получил {PRIZE_NAMES[target]}\n\n'
             f'<tg-emoji emoji-id="5280598054901145762">✨</tg-emoji> Хочешь улучшить его?',
             reply_markup=create_action_keyboard(game_id),
+            reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
             parse_mode="HTML",
         )
         return
@@ -644,6 +653,7 @@ async def process_casino_cell(callback: CallbackQuery):
         f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} получил {PRIZE_NAMES[prize]}\n\n'
         f'<tg-emoji emoji-id="5280598054901145762">✨</tg-emoji> Хочешь улучшить его?',
         reply_markup=create_action_keyboard(game_id),
+        reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
         parse_mode="HTML",
     )
 
