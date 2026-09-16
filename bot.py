@@ -69,6 +69,12 @@ PRIZE_NAMES = {
 }
 PRIZE_STAGES = (15, 25, 50, 100)
 BAR_DICE_VALUES = (1,)
+UPGRADE_GROUPS = (
+    ("rose", "gift"),
+    ("cake", "rocket"),
+    ("cup", "ring"),
+    ("nft",),
+)
 
 # Хранилище для игр казино (в памяти)
 casino_games = {}
@@ -212,9 +218,9 @@ def create_bar_keyboard(game_id: str, selected: int = -1, revealed: dict | None 
 
 
 def next_prize(stage: int):
-    if stage >= len(PRIZE_STAGES):
+    if stage >= len(UPGRADE_GROUPS):
         return "nft"
-    return random.choice(PRIZE_GROUPS[stage][1])
+    return random.choice(UPGRADE_GROUPS[stage])
 
 
 def message_link(message: Message):
@@ -573,7 +579,7 @@ async def process_casino_cell(callback: CallbackQuery):
     if action == "upgrade":
         stage = game["stage"]
         game["upgrade_slots"] = 5 if stage == 3 else 3
-        game["upgrade_target"] = "nft" if stage == 3 else next_prize(stage + 1)
+        game["upgrade_target"] = next_prize(stage)
         game["upgrade_winner"] = random.randrange(game["upgrade_slots"])
         game["upgrade_revealed"] = {}
         await callback.answer()
