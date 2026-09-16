@@ -50,12 +50,17 @@ PRIZE_VALUES = {
     "nft": 0
 }
 
-# Пары призов на каждой ступени апгрейда.
+# Точный состав поля 5x5. Порядок кнопок каждый раз случайно перемешивается.
 PRIZE_GROUPS = (
-    (11, ("bear", "hearts")),
-    (6, ("rose", "gift")),
-    (4, ("cake", "rocket")),
-    (4, ("ring", "cup")),
+    (1, ("nft",)),
+    (1, ("cup",)),
+    (1, ("ring",)),
+    (2, ("rocket",)),
+    (2, ("cake",)),
+    (4, ("rose",)),
+    (4, ("gift",)),
+    (5, ("bear",)),
+    (5, ("hearts",)),
 )
 
 PRIZE_NAMES = {
@@ -644,6 +649,9 @@ async def process_casino_cell(callback: CallbackQuery):
     game["selected"] = cell_idx
     prize = game["field"][cell_idx]
     game["current_prize"] = prize
+    if prize == "nft":
+        await claim_prize(prize)
+        return
     game["stage"] = PRIZE_STAGES.index(PRIZE_VALUES[prize])
     await callback.answer()
     await callback.message.edit_reply_markup(
