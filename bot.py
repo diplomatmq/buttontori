@@ -552,7 +552,7 @@ async def process_casino_cell(callback: CallbackQuery):
             )
         return
 
-    async def claim_prize(prize: str):
+    async def claim_prize(prize: str, preserve_game_message: bool = False):
         game["finished"] = True
         db.update_user_stats(game["user_id"], PRIZE_VALUES[prize])
         prize_name = PRIZE_NAMES[prize]
@@ -560,7 +560,14 @@ async def process_casino_cell(callback: CallbackQuery):
             f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} забрал {prize_name}\n\n'
             f'<tg-emoji emoji-id="5251324597193709038">✅</tg-emoji> Администратор уведомлен.'
         )
-        await callback.message.edit_text(claim_text, parse_mode="HTML")
+        if preserve_game_message:
+            await callback.message.answer(
+                claim_text,
+                reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
+                parse_mode="HTML",
+            )
+        else:
+            await callback.message.edit_text(claim_text, parse_mode="HTML")
         if ADMIN_ID:
             await bot.send_message(
                 ADMIN_ID,
@@ -656,7 +663,13 @@ async def process_casino_cell(callback: CallbackQuery):
     prize = game["field"][cell_idx]
     game["current_prize"] = prize
     if prize == "nft":
-        await claim_prize(prize)
+        await callback.answer()
+        await callback.message.edit_reply_markup(
+            reply_markup=create_casino_keyboard(
+                game_id, game["field"], selected_idx=cell_idx, user_id=game["user_id"]
+            )
+        )
+        await claim_prize(prize, preserve_game_message=True)
         return
     game["stage"] = PRIZE_STAGES.index(PRIZE_VALUES[prize])
     await callback.answer()
