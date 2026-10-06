@@ -7,7 +7,6 @@ from telethon.errors import (
     FloodWaitError,
     AuthKeyUnregisteredError,
     SessionPasswordNeededError,
-    StarGiftNotAvailableError,
 )
 
 # Исключение для недостатка Stars
@@ -63,17 +62,18 @@ class GiftTelegram:
             Список словарей с информацией о доступных подарках
         """
         try:
-            result = await self.client(functions.payments.GetStarGiftsRequest())
+            result = await self.client(functions.payments.GetStarGiftsRequest(hash=0))
             gifts = []
             
-            for gift in result.gifts:
-                gifts.append({
-                    "id": gift.id,
-                    "sticker": gift.sticker,
-                    "stars": gift.stars,
-                    "availability_remains": getattr(gift, "availability_remains", None),
-                    "availability_total": getattr(gift, "availability_total", None),
-                })
+            if hasattr(result, 'gifts'):
+                for gift in result.gifts:
+                    gifts.append({
+                        "id": gift.id,
+                        "sticker": gift.sticker if hasattr(gift, 'sticker') else None,
+                        "stars": gift.stars,
+                        "availability_remains": getattr(gift, "availability_remains", None),
+                        "availability_total": getattr(gift, "availability_total", None),
+                    })
             
             logger.info(f"📦 Доступно подарков: {len(gifts)}")
             return gifts
