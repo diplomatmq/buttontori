@@ -84,15 +84,16 @@ class GiftTelegram:
 
     async def send_gift(self, user_id: int, gift_id: str) -> None:
         """
-        Отправить подарок пользователю через Telegram API
+        Купить и отправить Telegram Star Gift пользователю
         
-        ВАЖНО: Этот метод использует TransferStarGiftRequest, который передает
-        уже купленный подарок. Для автоматической покупки нужна более новая версия
-        Telegram API или другой подход.
+        Flow:
+        1. Создать InputInvoiceStarGift с gift_id и recipient
+        2. Получить payment form через payments.getPaymentForm
+        3. Оплатить через payments.sendStarsForm
         
         Args:
             user_id: Telegram ID получателя
-            gift_id: ID подарка (для TransferStarGiftRequest это msg_id сохраненного подарка)
+            gift_id: ID подарка из starGift.id (getStarGifts)
             
         Raises:
             RuntimeError: Если gift_id не указан
@@ -107,22 +108,43 @@ class GiftTelegram:
             raise RuntimeError("Client is not connected. Call connect() first.")
         
         try:
-            # Получаем InputUser получателя
+            # Получаем InputPeer получателя
             try:
                 recipient = await self.client.get_input_entity(user_id)
             except ValueError as e:
                 logger.error(f"❌ Не удалось найти пользователя {user_id}: {e}")
                 raise UserIdInvalidError(f"User {user_id} not found")
             
-            # Пробуем использовать TransferStarGiftRequest (для уже купленных подарков)
-            result = await self.client(
-                functions.payments.TransferStarGiftRequest(
-                    stargift=types.InputSavedStarGift(msg_id=int(gift_id)),
-                    to_id=recipient,
+            # Шаг 1: Создаем invoice для покупки подарка
+            invoice = types.InputInvoiceStarGift(
+                peer=recipient,
+                gift_id=int(gift_id),
+                hide_name=False,  # Показываем имя отправителя
+                message=None,  # Текст подарка (опционально)
+                include_upgrade=False  # Не платить за апгрейд до коллекционного
+            )
+            
+            # Шаг 2: Получаем payment form
+            logger.debug(f"Получение payment form для gift_id={gift_id}, user_id={user_id}")
+            payment_form = await self.client(
+                functions.payments.GetPaymentFormRequest(
+                    invoice=invoice
                 )
             )
             
-            logger.info(f"✅ Подарок {gift_id} успешно отправлен пользователю {user_id}")
+            form_id = payment_form.form_id
+            logger.debug(f"Получен form_id={form_id}")
+            
+            # Шаг 3: Оплачиваем подарок через Stars
+            logger.debug(f"Отправка оплаты через Stars...")
+            result = await self.client(
+                functions.payments.SendStarsFormRequest(
+                    form_id=form_id,
+                    invoice=invoice
+                )
+            )
+            
+            logger.info(f"✅ Подарок {gift_id} успешно куплен и отправлен пользователю {user_id}")
             return result
             
         except FloodWaitError as e:
@@ -139,27 +161,33 @@ class GiftTelegram:
         
         except Exception as e:
             error_msg = str(e).lower()
+            error_type = type(e).__name__
             
-            # Проверяем ошибки связанные с недостатком Stars или подарков
+            # Проверяем ошибки связанные с недостатком Stars
             if any(keyword in error_msg for keyword in [
+                "balance_too_low",
                 "insufficient", 
                 "not enough", 
                 "balance",
-                "stars",
-                "purchase_failed",
-                "payment_required",
-                "gift_not_found",
-                "msg_id_invalid"
-            ]):
+                "stars"
+            ]) or "BALANCE_TOO_LOW" in str(e):
                 logger.error(
-                    f"💰 Недостаточно Stars или подарок не найден: user_id={user_id}, gift_id={gift_id}"
+                    f"💰 Недостаточно Stars для покупки подарка user_id={user_id}, gift_id={gift_id}"
                 )
                 raise InsufficientStarsError(
-                    f"Insufficient Stars balance or gift not found. Error: {e}"
+                    f"Insufficient Stars balance to buy gift. Error: {e}"
                 )
             
+            # Проверяем ошибки про лимиты использования подарка
+            if "usage_limited" in error_msg or "sold out" in error_msg:
+                logger.error(f"🚫 Подарок {gift_id} распродан или недоступен")
+                raise RuntimeError(f"Gift {gift_id} is sold out or unavailable: {e}")
+            
             # Другие неожиданные ошибки
-            logger.exception(f"❌ Неожиданная ошибка при отправке подарка user_id={user_id}, gift_id={gift_id}")
+            logger.exception(
+                f"❌ Неожиданная ошибка при покупке подарка "
+                f"user_id={user_id}, gift_id={gift_id}, error_type={error_type}"
+            )
             raise
 
     async def check_user_exists(self, user_id: int) -> bool:
