@@ -4,6 +4,12 @@
 *.db-wal
 data/
 
+# Telethon sessions (ВАЖНО!)
+*.session
+*.session-journal
+sessions/*.session
+sessions/*.session-journal
+
 # Python
 __pycache__/
 *.py[cod]
@@ -23,7 +29,7 @@ ENV/
 # Логи
 *.log
 
-# Конфигурация
+# Конфигурация (ВАЖНО!)
 .env
 config_local.py
 

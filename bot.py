@@ -7,8 +7,17 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyParameters
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import random
-from database import Database
-from config import BOT_TOKEN, ADMIN_ID, DB_PATH, LOG_LEVEL, GAME_ROWS, GAME_COLS, ALLOWED_CHAT_ID
+from database.db import Database
+from config import (
+    BOT_TOKEN,
+    ADMIN_ID,
+    DATABASE_URL,
+    LOG_LEVEL,
+    GAME_ROWS,
+    GAME_COLS,
+    ALLOWED_CHAT_ID,
+    TELEGRAM_GIFT_MAPPING,
+)
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-db = Database(db_path=DB_PATH)
+db = Database(DATABASE_URL)
 
 # Эмодзи для призов (кастомные Telegram эмодзи)
 PRIZES = {
@@ -53,14 +62,11 @@ PRIZE_VALUES = {
 # Точный состав поля 5x5. Порядок кнопок каждый раз случайно перемешивается.
 PRIZE_GROUPS = (
     (1, ("nft",)),
-    (1, ("cup",)),
-    (1, ("ring",)),
-    (2, ("rocket",)),
-    (2, ("cake",)),
-    (4, ("rose",)),
-    (4, ("gift",)),
-    (5, ("bear",)),
-    (5, ("hearts",)),
+    (1, ("rocket",)),
+    (5, ("rose",)),
+    (6, ("gift",)),
+    (6, ("bear",)),
+    (6, ("hearts",)),
 )
 
 PRIZE_NAMES = {
@@ -70,9 +76,8 @@ PRIZE_NAMES = {
 PRIZE_STAGES = (15, 25, 50, 100)
 BAR_DICE_VALUES = (1,)
 UPGRADE_GROUPS = (
-    ("rose", "gift"),
-    ("cake", "rocket"),
-    ("cup", "ring"),
+    ("gift", "rose"),
+    ("rocket",),
     ("nft",),
 )
 
@@ -236,7 +241,7 @@ async def cmd_start(message: Message):
     username = message.from_user.username or message.from_user.first_name
     
     # Добавляем пользователя в БД
-    db.add_user(user_id, username)
+    await db.add_user(user_id, username)
     
     await message.answer(
         f"👋 Привет, {username}!\n\n"
@@ -257,7 +262,7 @@ async def cmd_play(message: Message):
     field = generate_game_field()
     
     # Создаем игру в БД
-    game_id = db.create_game(user_id, field)
+    game_id = await db.create_game(user_id, field)
     
     # Отправляем сообщение с клавиатурой
     keyboard = create_game_keyboard(game_id, field, [])
@@ -282,7 +287,7 @@ async def process_open_cell(callback: CallbackQuery):
     user_id = callback.from_user.id
     
     # Получаем игру из БД
-    game = db.get_game(game_id)
+    game = await db.get_game(game_id)
     
     if not game:
         await callback.answer("❌ Игра не найдена!", show_alert=True)
@@ -310,7 +315,7 @@ async def process_open_cell(callback: CallbackQuery):
     prize_value = PRIZE_VALUES[prize]
     
     # Обновляем игру в БД
-    db.update_game(game_id, opened)
+    await db.update_game(game_id, opened)
     
     # Обновляем клавиатуру
     keyboard = create_game_keyboard(game_id, field, opened)
@@ -369,7 +374,7 @@ async def process_open_cell(callback: CallbackQuery):
     )
     
     # Обновляем статистику пользователя
-    db.update_user_stats(user_id, prize_value)
+    await db.record_prize(user_id, prize, prize_value)
 
 
 @dp.callback_query(F.data.startswith("opened_"))
@@ -530,23 +535,44 @@ async def process_casino_cell(callback: CallbackQuery):
             return
 
         game["finished"] = True
-        await callback.message.answer(
+        
+        # Записываем приз медведя в БД и очередь доставки
+        prize_type = "bear"
+        prize_value = PRIZE_VALUES.get(prize_type, 15)
+        gift_id = TELEGRAM_GIFT_MAPPING.get(prize_type)
+        
+        await db.record_prize(game["user_id"], prize_type, prize_value, gift_id)
+        
+        success_text = (
             '<tg-emoji emoji-id="5159316330310010269">🎉</tg-emoji> Поздравляю! Вы выиграли '
             '<tg-emoji emoji-id="5206502842478638898">🧸</tg-emoji>\n\n'
             'Твой приз уже в пути <tg-emoji emoji-id="5159332079955084776">🎁</tg-emoji>\n'
             + ('<tg-emoji emoji-id="5382360493161725288">✨</tg-emoji>' * 8) + '\n'
             '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
-            '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
+            '<a href="https://t.me/toriwmarketbot">Купить звезды</a>'
+        )
+        
+        await callback.message.answer(
+            success_text,
             reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
+        
         if ADMIN_ID:
-            await bot.send_message(
-                ADMIN_ID,
+            admin_text = (
                 f"🎁 {username_mention} забрал Медведя\n"
                 f"Профиль: <a href=\"tg://user?id={game['user_id']}\">открыть</a>\n"
-                f"Сообщение: {message_link(callback.message)}",
+                f"Сообщение: {message_link(callback.message)}\n"
+            )
+            if gift_id:
+                admin_text += f"\n✅ Подарок добавлен в очередь доставки"
+            else:
+                admin_text += f"\n⚠️ Gift ID не настроен"
+            
+            await bot.send_message(
+                ADMIN_ID,
+                admin_text,
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -554,12 +580,31 @@ async def process_casino_cell(callback: CallbackQuery):
 
     async def claim_prize(prize: str, preserve_game_message: bool = False):
         game["finished"] = True
-        db.update_user_stats(game["user_id"], PRIZE_VALUES[prize])
+        
+        # Получаем gift_id для данного приза
+        gift_id = TELEGRAM_GIFT_MAPPING.get(prize)
+        
+        # Записываем приз в статистику и создаем запись в очереди доставки
+        await db.record_prize(game["user_id"], prize, PRIZE_VALUES[prize], gift_id)
+        
         prize_name = PRIZE_NAMES[prize]
         claim_text = (
             f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} забрал {prize_name}\n\n'
             f'<tg-emoji emoji-id="5251324597193709038">✅</tg-emoji> Администратор уведомлен.'
         )
+        
+        # Добавляем информацию о доставке подарка
+        if gift_id:
+            claim_text += (
+                f'\n<tg-emoji emoji-id="5159332079955084776">🎁</tg-emoji> '
+                f'<b>Подарок будет доставлен автоматически!</b>'
+            )
+        else:
+            claim_text += (
+                f'\n<tg-emoji emoji-id="5280659198055572187">⚠️</tg-emoji> '
+                f'<i>Gift ID для {prize_name} не настроен</i>'
+            )
+        
         if preserve_game_message:
             await callback.message.answer(
                 claim_text,
@@ -568,12 +613,23 @@ async def process_casino_cell(callback: CallbackQuery):
             )
         else:
             await callback.message.edit_text(claim_text, parse_mode="HTML")
+        
         if ADMIN_ID:
-            await bot.send_message(
-                ADMIN_ID,
+            # Уведомляем админа о новом призе
+            admin_text = (
                 f"🎁 {username_mention} забрал: {prize_name}\n"
                 f"Профиль: <a href=\"tg://user?id={game['user_id']}\">открыть</a>\n"
-                f"Сообщение: {message_link(callback.message)}",
+                f"Сообщение: {message_link(callback.message)}\n"
+            )
+            
+            if gift_id:
+                admin_text += f"\n✅ Подарок добавлен в очередь доставки (gift_id={gift_id})"
+            else:
+                admin_text += f"\n⚠️ Gift ID не настроен - необходима ручная выдача"
+            
+            await bot.send_message(
+                ADMIN_ID,
+                admin_text,
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -689,19 +745,29 @@ async def process_casino_cell(callback: CallbackQuery):
 async def cmd_stats(message: Message):
     """Показывает статистику пользователя"""
     user_id = message.from_user.id
-    stats = db.get_user_stats(user_id)
+    stats = await db.get_user_stats(user_id)
     
     if not stats:
         await message.answer("📊 У тебя пока нет статистики. Сыграй с помощью /play")
         return
     
-    await message.answer(
+    # Получаем статистику доставок
+    delivery_stats = await db.get_delivery_stats(user_id)
+    
+    stats_text = (
         f"📊 <b>Твоя статистика:</b>\n\n"
         f"🎮 Игр сыграно: {stats['games_played']}\n"
         f"💎 Всего выиграно: {stats['total_winnings']} 💰\n"
-        f"📅 В боте с: {stats['created_at'][:10]}",
-        parse_mode="HTML"
+        f"📅 В боте с: {stats['created_at'][:10]}\n\n"
+        f"<b>🎁 Доставка подарков:</b>\n"
+        f"✅ Доставлено: {delivery_stats['delivered']}\n"
+        f"⏳ В обработке: {delivery_stats['pending']}\n"
     )
+    
+    if delivery_stats['failed'] > 0:
+        stats_text += f"❌ Ошибки: {delivery_stats['failed']}\n"
+    
+    await message.answer(stats_text, parse_mode="HTML")
 
 
 @dp.message(Command("help"))
@@ -742,7 +808,7 @@ async def cmd_admin(message: Message):
         return
     
     # Получаем статистику
-    top_users = db.get_top_users(10)
+    top_users = await db.get_top_users(10)
     
     stats_text = "👑 <b>Топ-10 игроков:</b>\n\n"
     for idx, user in enumerate(top_users, 1):
@@ -752,6 +818,49 @@ async def cmd_admin(message: Message):
         stats_text += f"   🎮 Игр: {user['games_played']}\n\n"
     
     await message.answer(stats_text, parse_mode="HTML")
+
+
+@dp.message(Command("deliveries"))
+async def cmd_deliveries(message: Message):
+    """Показать статус очереди доставок (только для админа)"""
+    user_id = message.from_user.id
+    
+    if user_id != ADMIN_ID:
+        await message.answer("❌ У тебя нет доступа к этой команде!")
+        return
+    
+    # Получаем pending доставки
+    delivery_ids = await db.pending_delivery_ids()
+    
+    if not delivery_ids:
+        await message.answer(
+            "✅ <b>Очередь доставок пуста</b>\n\n"
+            "Все подарки доставлены!",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Формируем отчет
+    delivery_text = (
+        f"📦 <b>Очередь доставок</b>\n\n"
+        f"Всего в очереди: {len(delivery_ids)}\n\n"
+    )
+    
+    # Показываем первые 10 доставок
+    for idx, delivery_id in enumerate(delivery_ids[:10], 1):
+        delivery_text += f"{idx}. Delivery #{delivery_id}\n"
+    
+    if len(delivery_ids) > 10:
+        delivery_text += f"\n... и еще {len(delivery_ids) - 10} доставок"
+    
+    delivery_text += (
+        "\n\n💡 <b>Проверьте:</b>\n"
+        "• Gift Worker запущен?\n"
+        "• Session файл существует?\n"
+        "• Gift IDs настроены в .env?"
+    )
+    
+    await message.answer(delivery_text, parse_mode="HTML")
 
 
 async def main():
@@ -770,14 +879,8 @@ async def main():
         else:
             logger.info(f"✅ Бот будет работать только в чате: {ALLOWED_CHAT_ID}")
         
-        # Создаем директорию для БД если нужно
-        db_dir = os.path.dirname(DB_PATH)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-            logger.info(f"✅ Создана директория для БД: {db_dir}")
-        
         # Инициализируем БД
-        db.init_db()
+        await db.init_db()
         logger.info("✅ База данных инициализирована")
         
         # Запускаем бота

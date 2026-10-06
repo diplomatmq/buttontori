@@ -16,7 +16,6 @@ ENV/
 *.db
 *.db-shm
 *.db-wal
-data/
 
 # IDE
 .vscode/
@@ -29,11 +28,22 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 
-# Документация
-README.md
+# Документация (оставляем в образе для справки)
+# README.md
 
 # Логи
 *.log
 
-# Environment (копируем отдельно)
+# Environment (копируем отдельно через env_file в docker-compose)
 .env.example
+
+# Kilo worktrees
+.kilo/
+
+# Backup files
+*.backup
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db

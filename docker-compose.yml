@@ -1,20 +1,61 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gift_caps_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bot
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gift_caps_network
+
   bot:
     build: .
     container_name: gift_caps_bot
     restart: unless-stopped
+    depends_on:
+      - postgres
     env_file:
       - .env
     volumes:
-      # Сохраняем базу данных на хосте
-      - ./data:/app/data
+      - ./sessions:/app/sessions  # Session файлы для Telethon
     environment:
-      # Переопределяем путь к БД для Docker
-      - DB_PATH=/app/data/bot_database.db
+      - DATABASE_URL=postgresql+asyncpg://bot:bot@postgres:5432/bot
+    networks:
+      - gift_caps_network
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+  worker:
+    build: .
+    container_name: gift_caps_worker
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    command: ["python", "-m", "gift_worker.worker"]
+    volumes:
+      - ./sessions:/app/sessions  # Session файлы для Telethon (ВАЖНО!)
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://bot:bot@postgres:5432/bot
+    networks:
+      - gift_caps_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+
+networks:
+  gift_caps_network:
+    driver: bridge
