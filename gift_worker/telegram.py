@@ -84,7 +84,7 @@ class GiftTelegram:
 
     async def send_gift(self, user_id: int, gift_id: str) -> None:
         """
-        Отправить подарок пользователю через sendGift API
+        Отправить подарок пользователю через Telegram API
         
         Args:
             user_id: Telegram ID получателя
@@ -111,14 +111,14 @@ class GiftTelegram:
                 logger.error(f"❌ Не удалось найти пользователя {user_id}: {e}")
                 raise UserIdInvalidError(f"User {user_id} not found")
             
-            # Отправляем подарок через sendGift API
-            # Этот метод должен автоматически списать Stars и отправить подарок
+            # Отправляем подарок через SaveStarGiftRequest
+            # Параметры: user_id, stargift (gift_id), message, limited (optional)
             result = await self.client(
-                functions.payments.SendStarGiftRequest(
+                functions.payments.SaveStarGiftRequest(
                     user_id=recipient,
-                    gift_id=int(gift_id),
-                    hide_name=False,  # Показываем имя отправителя
-                    message="",  # Можно добавить текст
+                    stargift=types.InputStarGift(id=int(gift_id)),
+                    message="",  # Текст подарка
+                    limited=False  # Обычный подарок, не лимитированный
                 )
             )
             
