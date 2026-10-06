@@ -86,14 +86,17 @@ class GiftTelegram:
         """
         Отправить подарок пользователю через Telegram API
         
+        ВАЖНО: Этот метод использует TransferStarGiftRequest, который передает
+        уже купленный подарок. Для автоматической покупки нужна более новая версия
+        Telegram API или другой подход.
+        
         Args:
             user_id: Telegram ID получателя
-            gift_id: ID подарка из getAvailableGifts
+            gift_id: ID подарка (для TransferStarGiftRequest это msg_id сохраненного подарка)
             
         Raises:
             RuntimeError: Если gift_id не указан
             UserIdInvalidError: Если user_id недействителен
-            UserNotMutualContactError: Если пользователь недоступен
             FloodWaitError: Если нужно подождать из-за лимитов
             InsufficientStarsError: Если недостаточно Stars на балансе
         """
@@ -111,14 +114,11 @@ class GiftTelegram:
                 logger.error(f"❌ Не удалось найти пользователя {user_id}: {e}")
                 raise UserIdInvalidError(f"User {user_id} not found")
             
-            # Отправляем подарок через SaveStarGiftRequest
-            # Параметры: user_id, stargift (gift_id), message, limited (optional)
+            # Пробуем использовать TransferStarGiftRequest (для уже купленных подарков)
             result = await self.client(
-                functions.payments.SaveStarGiftRequest(
-                    user_id=recipient,
-                    stargift=types.InputStarGift(id=int(gift_id)),
-                    message="",  # Текст подарка
-                    limited=False  # Обычный подарок, не лимитированный
+                functions.payments.TransferStarGiftRequest(
+                    stargift=types.InputSavedStarGift(msg_id=int(gift_id)),
+                    to_id=recipient,
                 )
             )
             
@@ -140,7 +140,7 @@ class GiftTelegram:
         except Exception as e:
             error_msg = str(e).lower()
             
-            # Проверяем ошибки связанные с недостатком Stars
+            # Проверяем ошибки связанные с недостатком Stars или подарков
             if any(keyword in error_msg for keyword in [
                 "insufficient", 
                 "not enough", 
@@ -148,13 +148,14 @@ class GiftTelegram:
                 "stars",
                 "purchase_failed",
                 "payment_required",
-                "star_gift_not_available"
+                "gift_not_found",
+                "msg_id_invalid"
             ]):
                 logger.error(
-                    f"💰 Недостаточно Stars для отправки подарка user_id={user_id}, gift_id={gift_id}"
+                    f"💰 Недостаточно Stars или подарок не найден: user_id={user_id}, gift_id={gift_id}"
                 )
                 raise InsufficientStarsError(
-                    f"Insufficient Stars balance to send gift. Error: {e}"
+                    f"Insufficient Stars balance or gift not found. Error: {e}"
                 )
             
             # Другие неожиданные ошибки
