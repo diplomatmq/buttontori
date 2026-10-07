@@ -717,20 +717,18 @@ async def process_casino_cell(callback: CallbackQuery):
             )
         )
         if cell_idx != game["upgrade_winner"]:
-            # Проигрыш - забираем ТЕКУЩИЙ приз (до апгрейда)
-            current_prize = game["current_prize"]
+            # Проигрыш - пользователь ничего не получает
             game["finished"] = True
             await callback.message.answer(
                 '<tg-emoji emoji-id="5157000668627600960">😔</tg-emoji> В этот раз не повезло\n\n'
-                '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Но ты забираешь свой текущий приз!\n\n'
+                '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Повезет в следующий раз\n\n'
                 '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
                 '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
                 reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
-            # Автовыдача текущего приза
-            await claim_prize(current_prize, preserve_game_message=True)
+            # НЕ выдаем приз - пользователь остается ни с чем
             return
 
         game["current_prize"] = target
