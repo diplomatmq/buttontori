@@ -733,6 +733,8 @@ async def process_casino_cell(callback: CallbackQuery):
 
         game["current_prize"] = target
         game["stage"] += 1
+        game["upgrade_started"] = False  # Сбрасываем флаг для следующего апгрейда
+        
         if target == "nft":
             await callback.message.answer(
                 f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> Поздравляю, {username_mention}! Ты выиграл NFT!',
