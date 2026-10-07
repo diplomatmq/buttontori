@@ -41,7 +41,7 @@ PRIZES = {
     "bouquet": "5280774333243873175",    # Букет - еще менее частый
     "rocket": "5283080528818360566",     # Ракета - еще менее частый
     "ring": "5280651583078556009",       # Кольцо - редкий
-    "diamond": "5280922999241859582",    # Бриллиант - редкий
+    "diamond": "5471952986970267163",    # Бриллиант - редкий (100 звезд)
     "cup": "5280769763398671636",        # Кубок - редкий
     "nft": "5359622339296256165"         # NFT - самый редкий
 }
@@ -56,6 +56,7 @@ PRIZE_VALUES = {
     "rocket": 50,
     "ring": 100,
     "cup": 100,
+    "diamond": 100,  # Новый приз - Бриллиант
     "nft": 0
 }
 
@@ -71,14 +72,16 @@ PRIZE_GROUPS = (
 
 PRIZE_NAMES = {
     "bear": "Медведь", "hearts": "Сердце", "rose": "Роза", "gift": "Подарок",
-    "cake": "Тортик", "rocket": "Ракета", "ring": "Кольцо", "cup": "Кубок", "nft": "NFT"
+    "cake": "Тортик", "rocket": "Ракета", "ring": "Кольцо", "diamond": "Бриллиант",
+    "cup": "Кубок", "nft": "NFT"
 }
-PRIZE_STAGES = (15, 25, 50, 100)
+PRIZE_STAGES = (15, 25, 50, 100)  # Стадии апгрейда: 15→25→50→100→NFT
 BAR_DICE_VALUES = (1,)
 UPGRADE_GROUPS = (
-    ("gift", "rose"),
-    ("rocket",),
-    ("nft",),
+    ("gift", "rose"),      # Стадия 0: 15→25
+    ("rocket",),           # Стадия 1: 25→50
+    ("diamond",),          # Стадия 2: 50→100 (новая стадия!)
+    ("nft",),              # Стадия 3: 100→NFT
 )
 
 # Хранилище для игр казино (в памяти)
@@ -495,7 +498,8 @@ async def process_casino_cell(callback: CallbackQuery):
         await callback.answer("❌ Это не твоя игра!", show_alert=True)
         return
 
-    if game["finished"]:
+    # Проверка finished только для первого выбора ячейки, НЕ для кнопок claim/upgrade
+    if game["finished"] and action not in ("claim", "upgrade", "pick", "revealed"):
         await callback.answer("ℹ️ Игра уже завершена!", show_alert=False)
         return
 
@@ -579,30 +583,42 @@ async def process_casino_cell(callback: CallbackQuery):
         return
 
     async def claim_prize(prize: str, preserve_game_message: bool = False):
+        """Забрать приз и добавить в очередь автоматической выдачи"""
         game["finished"] = True
         
         # Получаем gift_id для данного приза
         gift_id = TELEGRAM_GIFT_MAPPING.get(prize)
         
         # Записываем приз в статистику и создаем запись в очереди доставки
-        await db.record_prize(game["user_id"], prize, PRIZE_VALUES[prize], gift_id)
+        # NFT не добавляем в очередь - владелец выдает вручную
+        if prize != "nft":
+            await db.record_prize(game["user_id"], prize, PRIZE_VALUES[prize], gift_id)
+        else:
+            # NFT просто записываем в статистику без доставки
+            await db.update_user_stats(game["user_id"], PRIZE_VALUES.get(prize, 0))
         
         prize_name = PRIZE_NAMES[prize]
         claim_text = (
             f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} забрал {prize_name}\n\n'
-            f'<tg-emoji emoji-id="5251324597193709038">✅</tg-emoji> Администратор уведомлен.'
         )
         
-        # Добавляем информацию о доставке подарка
-        if gift_id:
+        # Разные сообщения для NFT и обычных призов
+        if prize == "nft":
             claim_text += (
-                f'\n<tg-emoji emoji-id="5159332079955084776">🎁</tg-emoji> '
+                f'<tg-emoji emoji-id="5159316330310010269">🔥</tg-emoji> '
+                f'<b>NFT будет выдан администратором вручную!</b>'
+            )
+        elif gift_id:
+            claim_text += (
+                f'<tg-emoji emoji-id="5251324597193709038">✅</tg-emoji> Администратор уведомлен.\n'
+                f'<tg-emoji emoji-id="5159332079955084776">🎁</tg-emoji> '
                 f'<b>Подарок будет доставлен автоматически!</b>'
             )
         else:
             claim_text += (
-                f'\n<tg-emoji emoji-id="5280659198055572187">⚠️</tg-emoji> '
-                f'<i>Gift ID для {prize_name} не настроен</i>'
+                f'<tg-emoji emoji-id="5251324597193709038">✅</tg-emoji> Администратор уведомлен.\n'
+                f'<tg-emoji emoji-id="5280659198055572187">⚠️</tg-emoji> '
+                f'<i>Gift ID для {prize_name} не настроен - выдача вручную</i>'
             )
         
         if preserve_game_message:
@@ -617,13 +633,15 @@ async def process_casino_cell(callback: CallbackQuery):
         if ADMIN_ID:
             # Уведомляем админа о новом призе
             admin_text = (
-                f"🎁 {username_mention} забрал: {prize_name}\n"
-                f"Профиль: <a href=\"tg://user?id={game['user_id']}\">открыть</a>\n"
-                f"Сообщение: {message_link(callback.message)}\n"
+                f"🎁 <b>{username_mention} забрал: {prize_name}</b>\n\n"
+                f"👤 Профиль: <a href=\"tg://user?id={game['user_id']}\">открыть</a>\n"
+                f"💬 Сообщение: {message_link(callback.message)}\n"
             )
             
-            if gift_id:
-                admin_text += f"\n✅ Подарок добавлен в очередь доставки (gift_id={gift_id})"
+            if prize == "nft":
+                admin_text += f"\n🔥 <b>NFT - требуется ручная выдача!</b>"
+            elif gift_id:
+                admin_text += f"\n✅ Подарок добавлен в очередь автовыдачи (gift_id={gift_id})"
             else:
                 admin_text += f"\n⚠️ Gift ID не настроен - необходима ручная выдача"
             
@@ -635,13 +653,31 @@ async def process_casino_cell(callback: CallbackQuery):
             )
 
     if action == "claim":
+        # Проверяем что уже не забирали
+        if game.get("prize_claimed"):
+            await callback.answer("✅ Приз уже забран!", show_alert=True)
+            return
+        
+        game["prize_claimed"] = True
         await callback.answer()
         await claim_prize(game["current_prize"])
         return
 
     if action == "upgrade":
+        # Проверяем что уже не начинали апгрейд
+        if game.get("upgrade_started"):
+            await callback.answer("⚠️ Апгрейд уже начат!", show_alert=True)
+            return
+        
+        game["upgrade_started"] = True
         stage = game["stage"]
-        game["upgrade_slots"] = 5 if stage == 3 else 3
+        
+        # Для апгрейда с Бриллианта (stage 3) используем 5 ячеек
+        if stage == 3:
+            game["upgrade_slots"] = 5
+        else:
+            game["upgrade_slots"] = 3
+            
         game["upgrade_target"] = next_prize(stage)
         game["upgrade_winner"] = random.randrange(game["upgrade_slots"])
         game["upgrade_revealed"] = {}
@@ -681,16 +717,20 @@ async def process_casino_cell(callback: CallbackQuery):
             )
         )
         if cell_idx != game["upgrade_winner"]:
+            # Проигрыш - забираем ТЕКУЩИЙ приз (до апгрейда)
+            current_prize = game["current_prize"]
             game["finished"] = True
             await callback.message.answer(
                 '<tg-emoji emoji-id="5157000668627600960">😔</tg-emoji> В этот раз не повезло\n\n'
-                '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Повезет в следующий раз\n\n'
+                '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Но ты забираешь свой текущий приз!\n\n'
                 '<tg-emoji emoji-id="5460980668378931880">⭐</tg-emoji> '
                 '<a href="https://t.me/toriwmarketbot">Купить звезды</a>',
                 reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
+            # Автовыдача текущего приза
+            await claim_prize(current_prize, preserve_game_message=True)
             return
 
         game["current_prize"] = target
@@ -701,7 +741,7 @@ async def process_casino_cell(callback: CallbackQuery):
                 reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
                 parse_mode="HTML",
             )
-            await claim_prize(target)
+            await claim_prize(target, preserve_game_message=True)
             return
 
         await callback.message.answer(

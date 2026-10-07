@@ -84,6 +84,22 @@ async def process_delivery(db: Database, telegram: GiftTelegram, delivery_id: in
             f"User {delivery.user_id} получил {delivery.prize_type}"
         )
         
+        # Уведомляем админа об успешной доставке
+        if bot and ADMIN_ID:
+            try:
+                prize_name = delivery.prize_type.title()
+                await bot.send_message(
+                    ADMIN_ID,
+                    f"✅ <b>Подарок успешно доставлен!</b>\n\n"
+                    f"👤 User ID: {delivery.user_id}\n"
+                    f"🎁 Приз: {prize_name}\n"
+                    f"💎 Gift ID: {gift_id}\n"
+                    f"🆔 Delivery ID: {delivery.delivery_id}",
+                    parse_mode="HTML"
+                )
+            except Exception as notify_error:
+                logger.error(f"Не удалось уведомить админа об успехе: {notify_error}")
+        
     except FloodWaitError as e:
         # Telegram просит подождать - это временная ошибка
         error_msg = f"FloodWait: need to wait {e.seconds} seconds"
@@ -136,6 +152,24 @@ async def process_delivery(db: Database, telegram: GiftTelegram, delivery_id: in
         error_msg = f"{type(e).__name__}: {str(e)}"
         logger.exception(f"❌ Delivery {delivery.delivery_id} failed: {error_msg}")
         await db.mark_delivery_failed(delivery.delivery_id, error_msg)
+        
+        # Уведомляем админа об ошибке
+        if bot and ADMIN_ID:
+            try:
+                prize_name = delivery.prize_type.title()
+                await bot.send_message(
+                    ADMIN_ID,
+                    f"❌ <b>Ошибка доставки подарка!</b>\n\n"
+                    f"👤 User ID: {delivery.user_id}\n"
+                    f"🎁 Приз: {prize_name}\n"
+                    f"💎 Gift ID: {delivery.gift_id or 'не указан'}\n"
+                    f"🆔 Delivery ID: {delivery.delivery_id}\n"
+                    f"🔄 Попытка: {delivery.attempts}/{MAX_DELIVERY_ATTEMPTS}\n\n"
+                    f"⚠️ Ошибка: {error_msg[:200]}",
+                    parse_mode="HTML"
+                )
+            except Exception as notify_error:
+                logger.error(f"Не удалось уведомить админа об ошибке: {notify_error}")
 
 
 async def main() -> None:
