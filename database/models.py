@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -11,7 +11,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255))
     games_played: Mapped[int] = mapped_column(Integer, default=0)
     total_winnings: Mapped[int] = mapped_column(Integer, default=0)
@@ -44,7 +44,7 @@ class PrizeDelivery(Base):
     __tablename__ = "prize_deliveries"
 
     delivery_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     prize_type: Mapped[str] = mapped_column(String(32))
     prize_value: Mapped[int] = mapped_column(Integer)
     gift_id: Mapped[str | None] = mapped_column(String(255))
@@ -60,7 +60,7 @@ class CasinoGame(Base):
     __tablename__ = "casino_games"
 
     game_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     source_message_id: Mapped[int] = mapped_column(Integer)
     field: Mapped[str | None] = mapped_column(Text)
     selected: Mapped[int] = mapped_column(Integer, default=-1)

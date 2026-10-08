@@ -19,16 +19,21 @@
    scp bot.py root@142.248.83.52:/opt/bots/buttontori/
    scp database/models.py root@142.248.83.52:/opt/bots/buttontori/database/
    scp database/db.py root@142.248.83.52:/opt/bots/buttontori/database/
+   scp migrate_to_bigint.sql root@142.248.83.52:/opt/bots/buttontori/
 
 2. Зайти на сервер:
    ssh root@142.248.83.52
    cd /opt/bots/buttontori
 
-3. Перезапустить:
+3. Применить миграцию БД:
+   docker-compose exec db psql -U buttontori_user -d buttontori_db -f /tmp/migrate_to_bigint.sql
+   (или скопировать содержимое migrate_to_bigint.sql и выполнить вручную)
+
+4. Перезапустить:
    docker-compose down
    docker-compose up -d --build
 
-4. Смотреть логи:
+5. Смотреть логи:
    docker-compose logs -f bot worker
 
 ───────────────────────────────────────────────────────────
