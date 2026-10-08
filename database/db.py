@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import desc, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .models import Base, Game, PrizeDelivery, User
+from .models import Base, Game, PrizeDelivery, User, CasinoGame
 
 
 class Database:
@@ -15,6 +15,7 @@ class Database:
     async def init_db(self) -> None:
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+            await connection.commit()
 
     async def add_user(self, user_id: int, username: str) -> None:
         async with self.session_factory() as session:
@@ -222,3 +223,53 @@ class Database:
                 }
                 for user in users
             ]
+
+    async def create_casino_game(self, game_id: str, user_id: int, source_message_id: int, field: list | None = None, **kwargs) -> None:
+        async with self.session_factory() as session:
+            import json
+            game = CasinoGame(
+                game_id=game_id,
+                user_id=user_id,
+                source_message_id=source_message_id,
+                field=json.dumps(field) if field else None,
+                **kwargs
+            )
+            session.add(game)
+            await session.commit()
+
+    async def get_casino_game(self, game_id: str) -> dict | None:
+        async with self.session_factory() as session:
+            game = await session.get(CasinoGame, game_id)
+            if not game:
+                return None
+            import json
+            return {
+                "game_id": game.game_id,
+                "user_id": game.user_id,
+                "source_message_id": game.source_message_id,
+                "field": json.loads(game.field) if game.field else None,
+                "selected": game.selected,
+                "finished": game.finished,
+                "current_prize": game.current_prize,
+                "stage": game.stage,
+                "upgrade_target": game.upgrade_target,
+                "upgrade_winner": game.upgrade_winner,
+                "upgrade_slots": game.upgrade_slots,
+                "upgrade_revealed": json.loads(game.upgrade_revealed) if game.upgrade_revealed else {},
+                "upgrade_started": game.upgrade_started,
+                "prize_claimed": game.prize_claimed,
+                "bar_bear_index": game.bar_bear_index,
+                "bar_selected": game.bar_selected,
+                "bar_revealed": json.loads(game.bar_revealed) if game.bar_revealed else {},
+            }
+
+    async def update_casino_game(self, game_id: str, **kwargs) -> None:
+        async with self.session_factory() as session:
+            import json
+            game = await session.get(CasinoGame, game_id)
+            if game:
+                for key, value in kwargs.items():
+                    if key in ('field', 'upgrade_revealed', 'bar_revealed') and isinstance(value, (dict, list)):
+                        value = json.dumps(value)
+                    setattr(game, key, value)
+                await session.commit()

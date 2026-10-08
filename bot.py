@@ -19,34 +19,30 @@ from config import (
     TELEGRAM_GIFT_MAPPING,
 )
 
-# Настройка логирования
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database(DATABASE_URL)
 
-# Эмодзи для призов (кастомные Telegram эмодзи)
 PRIZES = {
-    "bear": "5280598054901145762",        # Медведь - самый частый
-    "hearts": "5283228279988309088",     # Сердечко - самый частый
-    "rose": "5280947338821524402",       # Роза - менее частый
-    "gift": "5280615440928758599",       # Подарок - менее частый
-    "cake": "5280659198055572187",       # Тортик - еще менее частый
-    "bouquet": "5280774333243873175",    # Букет - еще менее частый
-    "rocket": "5283080528818360566",     # Ракета - еще менее частый
-    "ring": "5280651583078556009",       # Кольцо - редкий
-    "diamond": "5471952986970267163",    # Бриллиант - редкий (100 звезд)
-    "cup": "5280769763398671636",        # Кубок - редкий
-    "nft": "5359622339296256165"         # NFT - самый редкий
+    "bear": "5280598054901145762",
+    "hearts": "5283228279988309088",
+    "rose": "5280947338821524402",
+    "gift": "5280615440928758599",
+    "cake": "5280659198055572187",
+    "bouquet": "5280774333243873175",
+    "rocket": "5283080528818360566",
+    "ring": "5280651583078556009",
+    "diamond": "5471952986970267163",
+    "cup": "5280769763398671636",
+    "nft": "5359622339296256165"
 }
 
-# Стоимость призов
 PRIZE_VALUES = {
     "bear": 15,
     "hearts": 15,
@@ -56,11 +52,10 @@ PRIZE_VALUES = {
     "rocket": 50,
     "ring": 100,
     "cup": 100,
-    "diamond": 100,  # Новый приз - Бриллиант
+    "diamond": 100,
     "nft": 0
 }
 
-# Точный состав поля 5x5. Порядок кнопок каждый раз случайно перемешивается.
 PRIZE_GROUPS = (
     (1, ("nft",)),
     (1, ("rocket",)),
@@ -75,23 +70,18 @@ PRIZE_NAMES = {
     "cake": "Тортик", "rocket": "Ракета", "ring": "Кольцо", "diamond": "Бриллиант",
     "cup": "Кубок", "nft": "NFT"
 }
-PRIZE_STAGES = (15, 25, 50, 100)  # Стадии апгрейда: 15→25→50→100→NFT
+PRIZE_STAGES = (15, 25, 50, 100)
 BAR_DICE_VALUES = (1,)
 UPGRADE_GROUPS = (
-    ("gift", "rose"),      # Стадия 0: 15→25
-    ("rocket",),           # Стадия 1: 25→50
-    ("diamond",),          # Стадия 2: 50→100 (новая стадия!)
-    ("nft",),              # Стадия 3: 100→NFT
+    ("gift", "rose"),
+    ("rocket",),
+    ("diamond",),
+    ("nft",),
 )
-
-# Хранилище для игр казино (в памяти)
-casino_games = {}
 
 
 def generate_game_field(rows=GAME_ROWS, cols=GAME_COLS):
-    """Генерирует случайно перемешанное поле 5x5 с фиксированным составом."""
     total_cells = rows * cols
-
     expected_cells = sum(count for count, _ in PRIZE_GROUPS)
     if total_cells != expected_cells:
         raise ValueError(f"Игровое поле должно содержать {expected_cells} ячеек")
@@ -102,12 +92,10 @@ def generate_game_field(rows=GAME_ROWS, cols=GAME_COLS):
             field.append(random.choice(prize_options))
 
     random.shuffle(field)
-
     return field
 
 
 def create_game_keyboard(game_id: int, field: list, opened: list, rows=GAME_ROWS, cols=GAME_COLS):
-    """Создает клавиатуру с кнопками (обычная игра)"""
     builder = InlineKeyboardBuilder()
     
     for idx in range(rows * cols):
@@ -115,15 +103,13 @@ def create_game_keyboard(game_id: int, field: list, opened: list, rows=GAME_ROWS
         col = idx % cols
         
         if idx in opened:
-            # Открытая кнопка - показываем кастомное эмодзи
             prize = field[idx]
             button = InlineKeyboardButton(
-                text="✨",  # Fallback текст
+                text="✨",
                 callback_data=f"opened_{game_id}_{idx}",
                 custom_emoji_id=PRIZES[prize]
             )
         else:
-            # Закрытая кнопка - показываем placeholder
             button = InlineKeyboardButton(
                 text="🎁",
                 callback_data=f"open_{game_id}_{idx}"
@@ -136,34 +122,30 @@ def create_game_keyboard(game_id: int, field: list, opened: list, rows=GAME_ROWS
 
 
 def create_casino_keyboard(game_id: str, field: list, selected_idx: int = -1, user_id: int = 0, rows=5, cols=5):
-    """Создает инлайн-клавиатуру для казино игры (5x5) с кастомными эмодзи"""
     builder = InlineKeyboardBuilder()
     
     for idx in range(rows * cols):
         prize = field[idx]
         
         if selected_idx == -1:
-            # Игра еще не началась - все кнопки закрыты
             button = InlineKeyboardButton(
-                text=" ",  # Пустой текст, будет только эмодзи
+                text=" ",
                 callback_data=f"casino_{game_id}_{idx}_{user_id}",
-                icon_custom_emoji_id="5458713011545986880"  # Закрытый подарок
+                icon_custom_emoji_id="5458713011545986880"
             )
         elif idx == selected_idx:
-            # Выбранная кнопка - ЗЕЛЕНАЯ (success)
             button = InlineKeyboardButton(
                 text=" ",
                 callback_data=f"casino_done_{game_id}",
                 icon_custom_emoji_id=PRIZES[prize],
-                style="success"  # Зеленый фон
+                style="success"
             )
         else:
-            # Все остальные неоткрытые - КРАСНЫЕ (danger)
             button = InlineKeyboardButton(
                 text=" ",
                 callback_data=f"casino_done_{game_id}",
                 icon_custom_emoji_id=PRIZES[prize],
-                style="danger"  # Красный фон
+                style="danger"
             )
         
         builder.add(button)
@@ -239,35 +221,22 @@ def message_link(message: Message):
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    """Обработчик команды /start"""
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
     
-    # Добавляем пользователя в БД
     await db.add_user(user_id, username)
     
-    await message.answer(
-        f"👋 Привет, {username}!\n\n"
-        "🎮 Добро пожаловать в игру!\n\n"
-        "🎰 Отправь эмодзи казино и если выпадет 777 - получи приз!\n\n"
-        "Используй команды:\n"
-        "/stats - Твоя статистика\n"
-        "/help - Помощь"
-    )
+    await message.answer(f"👋 Привет, {username}!")
 
 
 @dp.message(Command("play"))
 async def cmd_play(message: Message):
-    """Создает новую игру"""
     user_id = message.from_user.id
     
-    # Генерируем игровое поле
     field = generate_game_field()
     
-    # Создаем игру в БД
     game_id = await db.create_game(user_id, field)
     
-    # Отправляем сообщение с клавиатурой
     keyboard = create_game_keyboard(game_id, field, [])
     
     await message.answer(
@@ -283,13 +252,11 @@ async def cmd_play(message: Message):
 
 @dp.callback_query(F.data.startswith("open_"))
 async def process_open_cell(callback: CallbackQuery):
-    """Обработка открытия ячейки"""
     data_parts = callback.data.split("_")
     game_id = int(data_parts[1])
     cell_idx = int(data_parts[2])
     user_id = callback.from_user.id
     
-    # Получаем игру из БД
     game = await db.get_game(game_id)
     
     if not game:
@@ -304,7 +271,6 @@ async def process_open_cell(callback: CallbackQuery):
         await callback.answer("❌ Игра уже завершена!", show_alert=True)
         return
     
-    # Открываем ячейку
     field = eval(game['field'])
     opened = eval(game['opened_cells'])
     
@@ -312,18 +278,14 @@ async def process_open_cell(callback: CallbackQuery):
         await callback.answer("❌ Эта ячейка уже открыта!", show_alert=True)
         return
     
-    # Добавляем ячейку в открытые
     opened.append(cell_idx)
     prize = field[cell_idx]
     prize_value = PRIZE_VALUES[prize]
     
-    # Обновляем игру в БД
     await db.update_game(game_id, opened)
     
-    # Обновляем клавиатуру
     keyboard = create_game_keyboard(game_id, field, opened)
     
-    # Названия призов для сообщения
     prize_names = {
         "bear": "Медведь",
         "hearts": "Сердечко",
@@ -338,7 +300,6 @@ async def process_open_cell(callback: CallbackQuery):
         "nft": "NFT"
     }
     
-    # Формируем сообщение о выигрыше
     prize_text = f"🎉 Ты выиграл: {prize_names[prize]}"
     
     if prize == "nft":
@@ -348,25 +309,8 @@ async def process_open_cell(callback: CallbackQuery):
     else:
         prize_text += f"\n💰 Стоимость: {prize_value}"
     
-    # Показываем уведомление
     await callback.answer(prize_text, show_alert=True)
     
-    # Названия призов
-    prize_names = {
-        "bear": "Медведь",
-        "hearts": "Сердечко",
-        "rose": "Роза",
-        "gift": "Подарок",
-        "cake": "Тортик",
-        "bouquet": "Букет",
-        "rocket": "Ракета",
-        "ring": "Кольцо",
-        "diamond": "Бриллиант",
-        "cup": "Кубок",
-        "nft": "NFT"
-    }
-    
-    # Обновляем сообщение
     await callback.message.edit_text(
         "🎮 <b>ДЖЕКПОТ</b> 🎮\n\n"
         f"🎉 Ты открыл: {prize_names[prize]}\n"
@@ -376,28 +320,22 @@ async def process_open_cell(callback: CallbackQuery):
         parse_mode="HTML"
     )
     
-    # Обновляем статистику пользователя
     await db.record_prize(user_id, prize, prize_value)
 
 
 @dp.callback_query(F.data.startswith("opened_"))
 async def process_opened_cell(callback: CallbackQuery):
-    """Обработка нажатия на уже открытую ячейку"""
     await callback.answer("ℹ️ Эта ячейка уже открыта!", show_alert=False)
 
 
 @dp.message(F.dice)
 async def handle_dice(message: Message):
-    """Обработка отправки эмодзи казино"""
-    # Проверяем что это разрешенный чат
     if message.chat.id != ALLOWED_CHAT_ID:
         return
     
-    # Проверяем что это именно казино (slot machine)
     if message.dice.emoji != "🎰":
         return
     
-    # Игнорируем пересланные сообщения
     if message.forward_from or message.forward_from_chat or message.forward_date:
         return
     
@@ -407,23 +345,19 @@ async def handle_dice(message: Message):
     
     logger.info(f"Пользователь {username} (ID: {user_id}) отправил казино, выпало: {dice_value}")
     
-    # Значение 64 - отдельный джекпот 777.
     if dice_value == 64:
         field = generate_game_field(rows=5, cols=5)
         game_id = f"{user_id}_{message.message_id}"
-        casino_games[game_id] = {
-            "user_id": user_id,
-            "source_message_id": message.message_id,
-            "field": field,
-            "selected": -1,
-            "finished": False,
-            "current_prize": None,
-            "stage": None,
-            "upgrade_target": None,
-            "upgrade_winner": None,
-            "upgrade_slots": 0,
-            "upgrade_revealed": {}
-        }
+        
+        await db.create_casino_game(
+            game_id=game_id,
+            user_id=user_id,
+            source_message_id=message.message_id,
+            field=field,
+            selected=-1,
+            finished=False,
+        )
+        
         keyboard = create_casino_keyboard(game_id, field, user_id=user_id)
         username_mention = f"@{message.from_user.username}" if message.from_user.username else username
         await message.reply(
@@ -436,14 +370,16 @@ async def handle_dice(message: Message):
     elif dice_value in BAR_DICE_VALUES:
         game_id = f"bar_{user_id}_{message.message_id}"
         bear_index = random.randrange(3)
-        casino_games[game_id] = {
-            "user_id": user_id,
-            "source_message_id": message.message_id,
-            "finished": False,
-            "bar_bear_index": bear_index,
-            "bar_selected": -1,
-            "bar_revealed": {},
-        }
+        
+        await db.create_casino_game(
+            game_id=game_id,
+            user_id=user_id,
+            source_message_id=message.message_id,
+            finished=False,
+            bar_bear_index=bear_index,
+            bar_selected=-1,
+        )
+        
         username_mention = f"@{message.from_user.username}" if message.from_user.username else username
         await message.reply(
             f'<tg-emoji emoji-id="4976672970601662075">🎰</tg-emoji> {username_mention} поймал три BAR!\n\n'
@@ -458,8 +394,6 @@ async def handle_dice(message: Message):
 
 @dp.callback_query(F.data.startswith("casino_"))
 async def process_casino_cell(callback: CallbackQuery):
-    """Обработка выбора ячейки в казино игре"""
-    # Проверяем что это разрешенный чат
     if callback.message.chat.id != ALLOWED_CHAT_ID:
         await callback.answer("❌ Бот работает только в определенном чате!", show_alert=True)
         return
@@ -487,18 +421,16 @@ async def process_casino_cell(callback: CallbackQuery):
             await callback.answer("❌ Это не твоя игра!", show_alert=True)
             return
     
-    # Проверяем существование игры
-    if game_id not in casino_games:
+    game = await db.get_casino_game(game_id)
+    
+    if not game:
         await callback.answer("❌ Игра не найдена!", show_alert=True)
         return
-    
-    game = casino_games[game_id]
     
     if callback.from_user.id != game["user_id"]:
         await callback.answer("❌ Это не твоя игра!", show_alert=True)
         return
 
-    # Проверка finished только для первого выбора ячейки, НЕ для кнопок claim/upgrade
     if game["finished"] and action not in ("claim", "upgrade", "pick", "revealed"):
         await callback.answer("ℹ️ Игра уже завершена!", show_alert=False)
         return
@@ -510,22 +442,24 @@ async def process_casino_cell(callback: CallbackQuery):
             await callback.answer("Ячейка уже выбрана", show_alert=True)
             return
 
-        game["bar_selected"] = cell_idx
-        game["bar_revealed"] = {
+        bar_revealed = {
             index: "4976609924776724046" if index == game["bar_bear_index"] else "5893163582194978381"
             for index in range(3)
         }
+        
+        await db.update_casino_game(game_id, bar_selected=cell_idx, bar_revealed=bar_revealed)
+        
         await callback.answer()
         await callback.message.edit_reply_markup(
             reply_markup=create_bar_keyboard(
                 game_id,
                 selected=cell_idx,
-                revealed=game["bar_revealed"],
+                revealed=bar_revealed,
             )
         )
 
         if cell_idx != game["bar_bear_index"]:
-            game["finished"] = True
+            await db.update_casino_game(game_id, finished=True)
             await callback.message.answer(
                 'В этот раз не повезло <tg-emoji emoji-id="5157000668627600960">😔</tg-emoji>\n\n'
                 'Повезет в следующий <tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji>\n'
@@ -538,9 +472,8 @@ async def process_casino_cell(callback: CallbackQuery):
             )
             return
 
-        game["finished"] = True
+        await db.update_casino_game(game_id, finished=True)
         
-        # Записываем приз медведя в БД и очередь доставки
         prize_type = "bear"
         prize_value = PRIZE_VALUES.get(prize_type, 15)
         gift_id = TELEGRAM_GIFT_MAPPING.get(prize_type)
@@ -583,18 +516,13 @@ async def process_casino_cell(callback: CallbackQuery):
         return
 
     async def claim_prize(prize: str, preserve_game_message: bool = False):
-        """Забрать приз и добавить в очередь автоматической выдачи"""
-        game["finished"] = True
+        await db.update_casino_game(game_id, finished=True)
         
-        # Получаем gift_id для данного приза
         gift_id = TELEGRAM_GIFT_MAPPING.get(prize)
         
-        # Записываем приз в статистику и создаем запись в очереди доставки
-        # NFT не добавляем в очередь - владелец выдает вручную
         if prize != "nft":
             await db.record_prize(game["user_id"], prize, PRIZE_VALUES[prize], gift_id)
         else:
-            # NFT просто записываем в статистику без доставки
             await db.update_user_stats(game["user_id"], PRIZE_VALUES.get(prize, 0))
         
         prize_name = PRIZE_NAMES[prize]
@@ -602,7 +530,6 @@ async def process_casino_cell(callback: CallbackQuery):
             f'<tg-emoji emoji-id="5348432081179406377">🎉</tg-emoji> {username_mention} забрал {prize_name}\n\n'
         )
         
-        # Разные сообщения для NFT и обычных призов
         if prize == "nft":
             claim_text += (
                 f'<tg-emoji emoji-id="5159316330310010269">🔥</tg-emoji> '
@@ -631,7 +558,6 @@ async def process_casino_cell(callback: CallbackQuery):
             await callback.message.edit_text(claim_text, parse_mode="HTML")
         
         if ADMIN_ID:
-            # Уведомляем админа о новом призе
             admin_text = (
                 f"🎁 <b>{username_mention} забрал: {prize_name}</b>\n\n"
                 f"👤 Профиль: <a href=\"tg://user?id={game['user_id']}\">открыть</a>\n"
@@ -653,42 +579,47 @@ async def process_casino_cell(callback: CallbackQuery):
             )
 
     if action == "claim":
-        # Проверяем что уже не забирали
         if game.get("prize_claimed"):
             await callback.answer("✅ Приз уже забран!", show_alert=True)
             return
         
-        game["prize_claimed"] = True
+        await db.update_casino_game(game_id, prize_claimed=True)
         await callback.answer()
         await claim_prize(game["current_prize"])
         return
 
     if action == "upgrade":
-        # Проверяем что уже не начинали апгрейд
         if game.get("upgrade_started"):
             await callback.answer("⚠️ Апгрейд уже начат!", show_alert=True)
             return
         
-        game["upgrade_started"] = True
         stage = game["stage"]
         
-        # Для апгрейда с Бриллианта (stage 3) используем 5 ячеек
         if stage == 3:
-            game["upgrade_slots"] = 5
+            upgrade_slots = 5
         else:
-            game["upgrade_slots"] = 3
+            upgrade_slots = 3
             
-        game["upgrade_target"] = next_prize(stage)
-        game["upgrade_winner"] = random.randrange(game["upgrade_slots"])
-        game["upgrade_revealed"] = {}
+        upgrade_target = next_prize(stage)
+        upgrade_winner = random.randrange(upgrade_slots)
+        
+        await db.update_casino_game(
+            game_id,
+            upgrade_started=True,
+            upgrade_slots=upgrade_slots,
+            upgrade_target=upgrade_target,
+            upgrade_winner=upgrade_winner,
+            upgrade_revealed={}
+        )
+        
         await callback.answer()
-        target_name = PRIZE_NAMES[game["upgrade_target"]]
+        target_name = PRIZE_NAMES[upgrade_target]
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
             f'<tg-emoji emoji-id="5427256683955007067">🎯</tg-emoji> <b>Улучшение приза!</b>\n\n'
             f'<blockquote><b>Приз на кону: {target_name}</b></blockquote>\n'
-            f'<tg-emoji emoji-id="5159316330310010269">🔮</tg-emoji> <b>Выбери 1 из {game["upgrade_slots"]} ячеек</b>',
-            reply_markup=create_upgrade_keyboard(game_id, game["upgrade_slots"]),
+            f'<tg-emoji emoji-id="5159316330310010269">🔮</tg-emoji> <b>Выбери 1 из {upgrade_slots} ячеек</b>',
+            reply_markup=create_upgrade_keyboard(game_id, upgrade_slots),
             reply_parameters=ReplyParameters(message_id=game["source_message_id"]),
             parse_mode="HTML",
         )
@@ -702,23 +633,27 @@ async def process_casino_cell(callback: CallbackQuery):
         if game["upgrade_revealed"]:
             await callback.answer("Ячейка уже выбрана", show_alert=True)
             return
+            
         target = game["upgrade_target"]
-        game["upgrade_revealed"] = {
+        upgrade_revealed = {
             index: (PRIZES[target] if index == game["upgrade_winner"] else "5893163582194978381")
             for index in range(game["upgrade_slots"])
         }
+        
+        await db.update_casino_game(game_id, upgrade_revealed=upgrade_revealed)
+        
         await callback.answer()
         await callback.message.edit_reply_markup(
             reply_markup=create_upgrade_keyboard(
                 game_id,
                 game["upgrade_slots"],
-                game["upgrade_revealed"],
+                upgrade_revealed,
                 selected=cell_idx,
             )
         )
+        
         if cell_idx != game["upgrade_winner"]:
-            # Проигрыш - пользователь ничего не получает
-            game["finished"] = True
+            await db.update_casino_game(game_id, finished=True)
             await callback.message.answer(
                 '<tg-emoji emoji-id="5157000668627600960">😔</tg-emoji> В этот раз не повезло\n\n'
                 '<tg-emoji emoji-id="5258090944506387855">🍀</tg-emoji> Повезет в следующий раз\n\n'
@@ -728,12 +663,16 @@ async def process_casino_cell(callback: CallbackQuery):
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
-            # НЕ выдаем приз - пользователь остается ни с чем
             return
 
-        game["current_prize"] = target
-        game["stage"] += 1
-        game["upgrade_started"] = False  # Сбрасываем флаг для следующего апгрейда
+        new_stage = game["stage"] + 1
+        
+        await db.update_casino_game(
+            game_id,
+            current_prize=target,
+            stage=new_stage,
+            upgrade_started=False
+        )
         
         if target == "nft":
             await callback.message.answer(
@@ -753,11 +692,17 @@ async def process_casino_cell(callback: CallbackQuery):
         )
         return
 
-    # Первый выбор после выпадения 777: приз еще не считается забранным.
-    game["finished"] = False
-    game["selected"] = cell_idx
     prize = game["field"][cell_idx]
-    game["current_prize"] = prize
+    stage = PRIZE_STAGES.index(PRIZE_VALUES[prize])
+    
+    await db.update_casino_game(
+        game_id,
+        finished=False,
+        selected=cell_idx,
+        current_prize=prize,
+        stage=stage
+    )
+    
     if prize == "nft":
         await callback.answer()
         await callback.message.edit_reply_markup(
@@ -767,7 +712,7 @@ async def process_casino_cell(callback: CallbackQuery):
         )
         await claim_prize(prize, preserve_game_message=True)
         return
-    game["stage"] = PRIZE_STAGES.index(PRIZE_VALUES[prize])
+        
     await callback.answer()
     await callback.message.edit_reply_markup(
         reply_markup=create_casino_keyboard(game_id, game["field"], selected_idx=cell_idx, user_id=game["user_id"])
@@ -783,7 +728,6 @@ async def process_casino_cell(callback: CallbackQuery):
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: Message):
-    """Показывает статистику пользователя"""
     user_id = message.from_user.id
     stats = await db.get_user_stats(user_id)
     
@@ -791,7 +735,6 @@ async def cmd_stats(message: Message):
         await message.answer("📊 У тебя пока нет статистики. Сыграй с помощью /play")
         return
     
-    # Получаем статистику доставок
     delivery_stats = await db.get_delivery_stats(user_id)
     
     stats_text = (
@@ -805,130 +748,36 @@ async def cmd_stats(message: Message):
     )
     
     if delivery_stats['failed'] > 0:
-        stats_text += f"❌ Ошибки: {delivery_stats['failed']}\n"
+        stats_text += f"❌ Ошибки доставки: {delivery_stats['failed']}\n"
     
     await message.answer(stats_text, parse_mode="HTML")
 
 
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
-    """Показывает справку"""
-    await message.answer(
-        "ℹ️ <b>Как играть:</b>\n\n"
-        "<b>Режим 1: Казино 🎰</b>\n"
-        "1. Отправь эмодзи казино 🎰\n"
-        "2. Если выпадет 777 - поздравляем!\n"
-        "3. Выбери одну ячейку из 25 (5x5)\n"
-        "4. Твой выбор подсветится 🟢, остальные откроются\n\n"
-        "<b>Режим 2: Обычная игра</b>\n"
-        "1. Используй /play для начала игры\n"
-        "2. Нажми на любую кнопку 🎁\n"
-        "3. Открывай сколько хочешь ячеек\n\n"
-        "<b>Призы (от частых к редким):</b>\n"
-        "🧸 Медведь - 15 💰\n"
-        "💕 Сердце - 15 💰\n"
-        "🌹 Роза - 25 💰\n"
-        "🎁 Подарок - 25 💰\n"
-        "🍰 Тортик - 50 💰\n"
-        "🚀 Ракета - 50 💰\n"
-        "💍 Кольцо - 100 💰 (редкий!)\n"
-        "🏆 Кубок - 100 💰 (редкий!)\n"
-        "🖼 NFT - финальный приз",
-        parse_mode="HTML"
+    help_text = (
+        "🎮 <b>Как играть:</b>\n\n"
+        "1️⃣ Отправь эмодзи 🎰 казино в чат\n"
+        "2️⃣ Если выпадет 777 (64) - получишь поле с призами\n"
+        "3️⃣ Выбери любую ячейку - приз гарантирован!\n"
+        "4️⃣ Можешь забрать приз или рискнуть и улучшить его\n\n"
+        "💎 <b>Призы:</b>\n"
+        "• Медведь, Сердце - 15 ⭐\n"
+        "• Роза, Подарок - 25 ⭐\n"
+        "• Ракета, Тортик - 50 ⭐\n"
+        "• Бриллиант, Кольцо, Кубок - 100 ⭐\n"
+        "• NFT - эксклюзив! 🔥\n\n"
+        "📊 /stats - Твоя статистика\n"
+        "🎮 /play - Игра с выбором ячеек"
     )
-
-
-@dp.message(Command("admin"))
-async def cmd_admin(message: Message):
-    """Админ-панель (только для администратора)"""
-    user_id = message.from_user.id
-    
-    if user_id != ADMIN_ID:
-        await message.answer("❌ У тебя нет доступа к админ-панели!")
-        return
-    
-    # Получаем статистику
-    top_users = await db.get_top_users(10)
-    
-    stats_text = "👑 <b>Топ-10 игроков:</b>\n\n"
-    for idx, user in enumerate(top_users, 1):
-        username = user['username'] or 'Без имени'
-        stats_text += f"{idx}. {username}\n"
-        stats_text += f"   💰 Выиграно: {user['total_winnings']}\n"
-        stats_text += f"   🎮 Игр: {user['games_played']}\n\n"
-    
-    await message.answer(stats_text, parse_mode="HTML")
-
-
-@dp.message(Command("deliveries"))
-async def cmd_deliveries(message: Message):
-    """Показать статус очереди доставок (только для админа)"""
-    user_id = message.from_user.id
-    
-    if user_id != ADMIN_ID:
-        await message.answer("❌ У тебя нет доступа к этой команде!")
-        return
-    
-    # Получаем pending доставки
-    delivery_ids = await db.pending_delivery_ids()
-    
-    if not delivery_ids:
-        await message.answer(
-            "✅ <b>Очередь доставок пуста</b>\n\n"
-            "Все подарки доставлены!",
-            parse_mode="HTML"
-        )
-        return
-    
-    # Формируем отчет
-    delivery_text = (
-        f"📦 <b>Очередь доставок</b>\n\n"
-        f"Всего в очереди: {len(delivery_ids)}\n\n"
-    )
-    
-    # Показываем первые 10 доставок
-    for idx, delivery_id in enumerate(delivery_ids[:10], 1):
-        delivery_text += f"{idx}. Delivery #{delivery_id}\n"
-    
-    if len(delivery_ids) > 10:
-        delivery_text += f"\n... и еще {len(delivery_ids) - 10} доставок"
-    
-    delivery_text += (
-        "\n\n💡 <b>Проверьте:</b>\n"
-        "• Gift Worker запущен?\n"
-        "• Session файл существует?\n"
-        "• Gift IDs настроены в .env?"
-    )
-    
-    await message.answer(delivery_text, parse_mode="HTML")
+    await message.answer(help_text, parse_mode="HTML")
 
 
 async def main():
-    """Запуск бота"""
-    try:
-        # Проверяем настройки
-        if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-            logger.error("❌ Не указан BOT_TOKEN в .env файле!")
-            return
-        
-        if ADMIN_ID == 0:
-            logger.warning("⚠️ Не указан ADMIN_ID в .env файле!")
-        
-        if ALLOWED_CHAT_ID == 0:
-            logger.warning("⚠️ Не указан ALLOWED_CHAT_ID в .env файле!")
-        else:
-            logger.info(f"✅ Бот будет работать только в чате: {ALLOWED_CHAT_ID}")
-        
-        # Инициализируем БД
-        await db.init_db()
-        logger.info("✅ База данных инициализирована")
-        
-        # Запускаем бота
-        logger.info("🚀 Бот запущен и готов к работе!")
-        await dp.start_polling(bot)
-    except Exception as e:
-        logger.error(f"❌ Ошибка при запуске бота: {e}")
-        raise
+    await db.init_db()
+    logger.info("База данных инициализирована")
+    
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
