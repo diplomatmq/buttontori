@@ -693,7 +693,7 @@ async def process_casino_cell(callback: CallbackQuery):
         return
 
     prize = game["field"][cell_idx]
-    stage = PRIZE_STAGES.index(PRIZE_VALUES[prize])
+    stage = len(UPGRADE_GROUPS) if prize == "nft" else PRIZE_STAGES.index(PRIZE_VALUES[prize])
     
     await db.update_casino_game(
         game_id,
