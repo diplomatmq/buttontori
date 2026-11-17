@@ -95,32 +95,6 @@ def generate_game_field(rows=GAME_ROWS, cols=GAME_COLS):
     return field
 
 
-def create_game_keyboard(game_id: int, field: list, opened: list, rows=GAME_ROWS, cols=GAME_COLS):
-    builder = InlineKeyboardBuilder()
-    
-    for idx in range(rows * cols):
-        row = idx // cols
-        col = idx % cols
-        
-        if idx in opened:
-            prize = field[idx]
-            button = InlineKeyboardButton(
-                text="✨",
-                callback_data=f"opened_{game_id}_{idx}",
-                custom_emoji_id=PRIZES[prize]
-            )
-        else:
-            button = InlineKeyboardButton(
-                text="🎁",
-                callback_data=f"open_{game_id}_{idx}"
-            )
-        
-        builder.add(button)
-    
-    builder.adjust(cols)
-    return builder.as_markup()
-
-
 def create_casino_keyboard(game_id: str, field: list, selected_idx: int = -1, user_id: int = 0, rows=5, cols=5):
     builder = InlineKeyboardBuilder()
     
@@ -227,105 +201,6 @@ async def cmd_start(message: Message):
     await db.add_user(user_id, username)
     
     await message.answer(f"👋 Привет, {username}!")
-
-
-@dp.message(Command("play"))
-async def cmd_play(message: Message):
-    user_id = message.from_user.id
-    
-    field = generate_game_field()
-    
-    game_id = await db.create_game(user_id, field)
-    
-    keyboard = create_game_keyboard(game_id, field, [])
-    
-    await message.answer(
-        "🎮 <b>ДЖЕКПОТ</b> 🎮\n\n"
-        f"🎯 Перед тобой {len(field)} ячеек.\n"
-        "Выбери одну и гарантированно забери свои призы:\n"
-        "💎 обычные до 100 💰 или редкие NFT 🚀\n\n"
-        "⬇️ Нажми на любую кнопку:",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-
-
-@dp.callback_query(F.data.startswith("open_"))
-async def process_open_cell(callback: CallbackQuery):
-    data_parts = callback.data.split("_")
-    game_id = int(data_parts[1])
-    cell_idx = int(data_parts[2])
-    user_id = callback.from_user.id
-    
-    game = await db.get_game(game_id)
-    
-    if not game:
-        await callback.answer("❌ Игра не найдена!", show_alert=True)
-        return
-    
-    if game['user_id'] != user_id:
-        await callback.answer("❌ Это не твоя игра!", show_alert=True)
-        return
-    
-    if game['is_finished']:
-        await callback.answer("❌ Игра уже завершена!", show_alert=True)
-        return
-    
-    field = eval(game['field'])
-    opened = eval(game['opened_cells'])
-    
-    if cell_idx in opened:
-        await callback.answer("❌ Эта ячейка уже открыта!", show_alert=True)
-        return
-    
-    opened.append(cell_idx)
-    prize = field[cell_idx]
-    prize_value = PRIZE_VALUES[prize]
-    
-    await db.update_game(game_id, opened)
-    
-    keyboard = create_game_keyboard(game_id, field, opened)
-    
-    prize_names = {
-        "bear": "Медведь",
-        "hearts": "Сердечко",
-        "rose": "Роза",
-        "gift": "Подарок",
-        "cake": "Тортик",
-        "bouquet": "Букет",
-        "rocket": "Ракета",
-        "ring": "Кольцо",
-        "diamond": "Бриллиант",
-        "cup": "Кубок",
-        "nft": "NFT"
-    }
-    
-    prize_text = f"🎉 Ты выиграл: {prize_names[prize]}"
-    
-    if prize == "nft":
-        prize_text += f"\n\n🔥🔥🔥 РЕДКИЙ NFT! Стоимость: {prize_value} 💰"
-    elif prize in ["ring", "diamond", "cup"]:
-        prize_text += f"\n\n✨ РЕДКИЙ ПРИЗ! Стоимость: {prize_value} 💰"
-    else:
-        prize_text += f"\n💰 Стоимость: {prize_value}"
-    
-    await callback.answer(prize_text, show_alert=True)
-    
-    await callback.message.edit_text(
-        "🎮 <b>ДЖЕКПОТ</b> 🎮\n\n"
-        f"🎉 Ты открыл: {prize_names[prize]}\n"
-        f"💰 Стоимость: {prize_value}\n\n"
-        "Открой еще ячейки или используй /play для новой игры!",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    
-    await db.record_prize(user_id, prize, prize_value)
-
-
-@dp.callback_query(F.data.startswith("opened_"))
-async def process_opened_cell(callback: CallbackQuery):
-    await callback.answer("ℹ️ Эта ячейка уже открыта!", show_alert=False)
 
 
 @dp.message(F.dice)
@@ -732,7 +607,7 @@ async def cmd_stats(message: Message):
     stats = await db.get_user_stats(user_id)
     
     if not stats:
-        await message.answer("📊 У тебя пока нет статистики. Сыграй с помощью /play")
+        await message.answer("📊 У тебя пока нет статистики.")
         return
     
     delivery_stats = await db.get_delivery_stats(user_id)
@@ -767,8 +642,7 @@ async def cmd_help(message: Message):
         "• Ракета, Тортик - 50 ⭐\n"
         "• Бриллиант, Кольцо, Кубок - 100 ⭐\n"
         "• NFT - эксклюзив! 🔥\n\n"
-        "📊 /stats - Твоя статистика\n"
-        "🎮 /play - Игра с выбором ячеек"
+        "📊 /stats - Твоя статистика"
     )
     await message.answer(help_text, parse_mode="HTML")
 
