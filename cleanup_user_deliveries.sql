@@ -1,6 +1,6 @@
 -- ============================================================
 --  Очистка очереди доставок подарков для конкретного юзера
---  Пользователь: 793216884
+--  Пользователь: 6335911487
 --  Таблица: prize_deliveries
 -- ============================================================
 --
@@ -19,23 +19,23 @@
 -- 1) Что будет удалено (предпросмотр строк)
 SELECT delivery_id, user_id, prize_type, prize_value, status, attempts, created_at
 FROM prize_deliveries
-WHERE user_id = 793216884
+WHERE user_id = 6335911487
 ORDER BY delivery_id;
 
 -- 2) Сводка по статусам
 SELECT status, COUNT(*) AS cnt
 FROM prize_deliveries
-WHERE user_id = 793216884
+WHERE user_id = 6335911487
 GROUP BY status;
 
 -- 3) Удаляем ВСЕ записи о доставках этого пользователя
 DELETE FROM prize_deliveries
-WHERE user_id = 793216884;
+WHERE user_id = 6335911487;
 
 -- 4) Проверка: должно вернуть 0
 SELECT COUNT(*) AS remaining
 FROM prize_deliveries
-WHERE user_id = 793216884;
+WHERE user_id = 6335911487;
 
 -- ============================================================
 -- 5) Поиск других накрутчиков: топ пользователей по числу доставок.
